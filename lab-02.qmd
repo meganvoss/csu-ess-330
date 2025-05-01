@@ -14,10 +14,10 @@ execute:
 # Question 1
 
 ```{r}
-remotes::install_github("ropensci/USAboundaries")
-remotes::install_github("ropensci/USAboundariesData")
-remotes::install_github("mikejohnson51/AOI")
-remotes::install_github("ropenscilabs/rnaturalearthdata")
+# remotes::install_github("ropensci/USAboundaries")
+# remotes::install_github("ropensci/USAboundariesData")
+# remotes::install_github("mikejohnson51/AOI")
+# remotes::install_github("ropenscilabs/rnaturalearthdata")
 ```
 
 
@@ -278,29 +278,38 @@ tibble(
 # 4.3
 
 ```{r}
-library(scales)  
+danger_zone_cities <- cities |> 
+  filter(in_danger_zone)
 
-top10_danger_zone <- cities |> 
-  filter(in_danger_zone) |> 
-  slice_max(order_by = population, n = 10)
+# Filter cities within 160 km of the national border
+danger_zone_cities <- cities |> 
+  filter(in_danger_zone)
 
+# For each state, find the city with the highest population in the danger zone
+top_city_per_state <- danger_zone_cities |>
+  group_by(state_name) |>
+  slice_max(order_by = population, n = 1) |>
+  ungroup()
+
+# Map it!
 ggplot() +
   geom_sf(data = countries, fill = "gray90", color = "black") +
-  geom_sf(data = states, fill = NA, color = "gray40", lty = 2) +
-  geom_sf(data = cities |> filter(in_danger_zone),
-          aes(color = population), size = 0.8) +
-  scale_color_gradient(low = "orange", high = "darkred", labels = comma) +
+  geom_sf(data = states, fill = NA, color = "gray50", linetype = 2) +
+  geom_sf(data = cities |> filter(in_danger_zone), aes(color = population), size = 0.8) +
   geom_label_repel(
-    data = top10_danger_zone,
+    data = top_city_per_state,
     aes(geometry = geometry, label = city),
     stat = "sf_coordinates",
     size = 3
   ) +
+  scale_color_gradient(low = "gold", high = "red", labels = scales::comma) +
   labs(
-    title = "Top 10 Most Populous Cities in the Danger Zone",
+    title = "Most Populous Danger Zone City per State",
+    subtitle = "Cities within 160 km of the U.S. national border",
     color = "Population"
   ) +
   theme_minimal()
+
 
 ```
 
