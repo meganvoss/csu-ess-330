@@ -278,6 +278,32 @@ tibble(
 # 4.3
 
 ```{r}
+library(tidyverse)
+library(sf)
+library(units)
+
+
+cities <- read_csv("data/uscities.csv", show_col_types = FALSE) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>%
+  st_transform(eqdc)
+
+```
+
+```{r}
+cities <- cities %>%
+  mutate(dist_to_us_border = drop_units(set_units(st_distance(geometry, usa_border), "km")))
+
+```
+
+```{r}
+cities <- cities %>%
+  mutate(in_danger_zone = dist_to_us_border <= 160)
+
+```
+
+```{r}
+library(ggrepel)
+
 danger_zone_cities <- cities |> 
   filter(in_danger_zone)
 
