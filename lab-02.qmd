@@ -1,0 +1,306 @@
+---
+title: "lab-02"
+subtitle: 'Ecosystem Science and Sustainability 523c'
+author:
+  - name: Megan Voss
+    email: megan.voss@colostate.edu
+format: html
+
+execute:
+  echo: true
+---
+
+
+# Question 1
+
+```{r}
+remotes::install_github("ropensci/USAboundaries")
+remotes::install_github("ropensci/USAboundariesData")
+remotes::install_github("mikejohnson51/AOI")
+remotes::install_github("ropenscilabs/rnaturalearthdata")
+```
+
+
+```{r}
+# spatial data science
+library(tidyverse)
+library(sf)
+library(units)
+
+# Data
+library(AOI)
+
+# Visualization
+library(gghighlight)
+library(ggrepel)
+library(knitr)
+```
+
+```{r}
+eqdc <- '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
+```
+
+```{r}
+aoi_get(country = c("MX", "CA", "USA"))
+eqdc <- st_crs(5070)
+
+countries <- rnaturalearth::countries110 |>
+  st_transform(eqdc)
+
+states <- USAboundaries::us_states(resolution = "low") |>
+  filter(!state_abbr %in% c("HI", "AK", "PR")) |>
+  st_transform(eqdc)
+```
+
+```{r}
+library(readr)
+
+cities <- read_csv("data/uscities.csv", show_col_types = FALSE) |>
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) |>
+  st_transform(eqdc)
+
+```
+
+# Question 2
+
+```{r}
+library(tidyverse)
+library(sf)
+library(units)
+library(USAboundaries)
+library(rnaturalearth)
+library(flextable)
+
+eqdc <- "+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs"
+
+states <- USAboundaries::us_states(resolution = "low") %>%
+  filter(!state_abbr %in% c("HI", "AK", "PR")) %>%
+  st_transform(eqdc)
+
+countries <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_transform(eqdc)
+
+cities <- read_csv("data/uscities.csv", show_col_types = FALSE) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>%
+  st_transform(eqdc)
+
+```
+
+# 2.1
+
+```{r}
+state_lines_unresolved <- states |> st_cast("MULTILINESTRING")
+
+dist_matrix <- st_distance(cities, state_lines_unresolved)
+
+cities$dist_to_state <- apply(dist_matrix, 1, min) |> set_units("km") |> drop_units()
+
+cities |> 
+  arrange(desc(dist_to_state)) |> 
+  slice(1:5) |> 
+  select(city, state_name, dist_to_state) |> 
+  flextable()
+
+```
+
+# 2.2
+
+```{r}
+usa_border <- states |> st_union() |> st_cast("MULTILINESTRING")
+
+dist_matrix_us <- st_distance(cities, usa_border)
+
+cities$dist_to_us_border <- apply(dist_matrix_us, 1, min) |> set_units("km") |> drop_units()
+
+cities |> 
+  arrange(desc(dist_to_us_border)) |> 
+  slice(1:5) |> 
+  select(city, state_name, dist_to_us_border) |> 
+  flextable()
+
+```
+
+# Question 3
+
+# 3.1
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(gghighlight)
+
+# Top 10 cities by population
+top10 <- cities |> 
+  slice_max(order_by = population, n = 10)
+
+ggplot() +
+  geom_sf(data = countries, fill = "gray95", color = "black") +
+  geom_sf(data = states, fill = NA, color = "gray40", lty = 2) +
+  geom_sf(data = cities, color = "blue", size = 0.5) +
+  geom_label_repel(
+    data = top10,
+    aes(geometry = geometry, label = city),
+    stat = "sf_coordinates",
+    size = 3
+  ) +
+  theme_minimal()
+
+```
+
+# 3.2
+
+```{r}
+far_us_border <- cities |> slice_max(dist_to_us_border, n = 5)
+
+ggplot() +
+  geom_sf(data = countries, fill = "gray95", color = "black") +
+  geom_sf(data = states, fill = NA, color = "gray40", lty = 2) +
+  geom_sf(data = cities, aes(color = dist_to_us_border), size = 0.7) +
+  scale_color_viridis_c(option = "C") +
+  geom_label_repel(
+    data = far_us_border,
+    aes(geometry = geometry, label = city),
+    stat = "sf_coordinates",
+    size = 3
+  ) +
+  labs(color = "Distance to National Border (km)") +
+  theme_minimal()
+
+```
+
+# 3.3
+
+```{r}
+far_state_border <- cities |> slice_max(dist_to_state, n = 5)
+
+ggplot() +
+  geom_sf(data = countries, fill = "gray95", color = "black") +
+  geom_sf(data = states, fill = NA, color = "gray40", lty = 2) +
+  geom_sf(data = cities, aes(color = dist_to_state), size = 0.7) +
+  scale_color_viridis_c(option = "D") +
+  geom_label_repel(
+    data = far_state_border,
+    aes(geometry = geometry, label = city),
+    stat = "sf_coordinates",
+    size = 3
+  ) +
+  labs(color = "Distance to State Border (km)") +
+  theme_minimal()
+```
+
+# 3.4
+
+```{r}
+mexico_border <- countries |> 
+  filter(admin == "Mexico") |> 
+  st_cast("MULTILINESTRING")
+
+dist_matrix_mexico <- st_distance(cities, mexico_border)
+
+cities$dist_to_mexico <- apply(dist_matrix_mexico, 1, min) |>
+  set_units("km") |> drop_units()
+
+```
+
+```{r}
+canada_border <- countries |> 
+  filter(admin == "Canada") |> 
+  st_cast("MULTILINESTRING")
+
+dist_matrix_canada <- st_distance(cities, canada_border)
+
+cities$dist_to_canada <- apply(dist_matrix_canada, 1, min) |>
+  set_units("km") |> drop_units()
+
+```
+
+```{r}
+cities <- cities |> 
+  mutate(can_mex_diff = abs(dist_to_canada - dist_to_mexico))
+
+equidistant_zone <- cities |> 
+  filter(can_mex_diff <= 100)
+
+top5_equal_dist <- equidistant_zone |> 
+  slice_max(order_by = population, n = 5)
+
+ggplot() +
+  geom_sf(data = countries, fill = "gray95", color = "black") +
+  geom_sf(data = states, fill = NA, color = "gray60", lty = 2) +
+  geom_sf(data = cities, color = "gray80", size = 0.3) +
+  geom_sf(data = equidistant_zone, aes(color = can_mex_diff), size = 1) +
+  gghighlight(use_direct_label = FALSE) +
+  geom_label_repel(
+    data = top5_equal_dist,
+    aes(geometry = geometry, label = city),
+    stat = "sf_coordinates",
+    size = 3
+  ) +
+  scale_color_viridis_c(option = "E") +
+  labs(title = "Cities Equidistant (±100km) from Canada & Mexico",
+       color = "Distance Difference (km)") +
+  theme_minimal()
+```
+
+# Question 4
+
+# 4.1
+
+```{r}
+cities <- cities |> 
+  mutate(in_danger_zone = dist_to_us_border <= 160)
+
+danger_zone_count <- sum(cities$in_danger_zone)
+
+danger_zone_count
+
+```
+
+# 4.2
+
+```{r}
+total_pop <- sum(cities$population, na.rm = TRUE)
+danger_zone_pop <- sum(cities$population[cities$in_danger_zone], na.rm = TRUE)
+
+danger_zone_pct <- (danger_zone_pop / total_pop) * 100
+
+tibble(
+  `Total Cities` = nrow(cities),
+  `Cities in Danger Zone` = danger_zone_count,
+  `Danger Zone Population` = danger_zone_pop,
+  `Total Population` = total_pop,
+  `Percent of Population in Zone` = round(danger_zone_pct, 1)
+) |> 
+  flextable()
+
+```
+
+# 4.3
+
+```{r}
+library(scales)  
+
+top10_danger_zone <- cities |> 
+  filter(in_danger_zone) |> 
+  slice_max(order_by = population, n = 10)
+
+ggplot() +
+  geom_sf(data = countries, fill = "gray90", color = "black") +
+  geom_sf(data = states, fill = NA, color = "gray40", lty = 2) +
+  geom_sf(data = cities |> filter(in_danger_zone),
+          aes(color = population), size = 0.8) +
+  scale_color_gradient(low = "orange", high = "darkred", labels = comma) +
+  geom_label_repel(
+    data = top10_danger_zone,
+    aes(geometry = geometry, label = city),
+    stat = "sf_coordinates",
+    size = 3
+  ) +
+  labs(
+    title = "Top 10 Most Populous Cities in the Danger Zone",
+    color = "Population"
+  ) +
+  theme_minimal()
+
+```
+
